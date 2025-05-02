@@ -11,14 +11,17 @@ from concurrent.futures import ThreadPoolExecutor
 
 class dataset:
 
-    def __init__(self, spark: SparkSession):
-        self.spark = SparkSession.builder \
-                    .appName("TelemetryProcessing") \
-                    .config("spark.driver.memory", "8g") \
-                    .config("spark.executor.memory", "8g") \
-                    .getOrCreate()
+    def __init__(self, spark: SparkSession, df):
+        self.spark = spark
+        self.df = df
 
+    # To have a sneak peek on the telemetry dataset
+    def show(self, n=5):
+        self.df.show(n=n)
 
+    # Interpolate missing values by replacing each null with the average 
+    # of the preceding and following non-null values
+    # --> used for numerical values
     def interpolate(df, *columns):
         window_spec = Window.partitionBy("pilot_index").orderBy("frameIdentifier")
         
@@ -33,7 +36,9 @@ class dataset:
             df = df.drop("prev_value", "next_value")
         return df
     
-    # forwardpass funtion
+    # forwardpass funtion, to replace each null value with the preceding
+    # non-null values
+    # --> used for categorical vaules
     def forwardpass(df, *columns):
         windowSpec = Window.partitionBy("pilot_index").orderBy("frameIdentifier").rowsBetween(-sys.maxsize, 0)
 
@@ -45,6 +50,7 @@ class dataset:
 
         return df
     
+    # a mathod to transform the dataset
     def transform(self):
         self.df = self.df.orderBy(["pilot_index", "frameIdentifier"])
 
@@ -101,16 +107,17 @@ class dataset:
 
         self.df = self.df.drop("resultStatus", "pitStatus", "brakesTemperature", "tyresSurfaceTemperature", "tyresInnerTemperature", "tyresPressure", "surfaceType", "tyresWear", "tyresDamage")
         
+    # applying the interpolation and forward passing functions after transformation
     def imputation(self):
         self.df = self.forwardpass(self.df, "FL_surfaceType", "FR_surfaceType", "RL_surfaceType", "RR_surfaceType", "pitLimiterStatus", "actualTyreCompound", "drs", "gear", "ersDeployMode", "fuelMix")
         self.df = self.interpolate(self.df, "speed", "throttle", "steer", "brake", "clutch", "engineRPM", "engineTemperature", "fuelInTank", "fuelRemainingLaps", "ersStoreEnergy", "ersHarvestedThisLapMGUK", "ersHarvestedThisLapMGUH", "ersDeployedThisLap", "FL_tyresSurfaceTemperature","FR_tyresSurfaceTemperature","RL_tyresSurfaceTemperature","RR_tyresSurfaceTemperature","FL_tyresInnerTemperature","FR_tyresInnerTemperature","RL_tyresInnerTemperature","RR_tyresInnerTemperature","FL_tyresPressure","FR_tyresPressure","RL_tyresPressure","RR_tyresPressure","FL_tyresWear","FR_tyresWear","RL_tyresWear","RR_tyresWear","FL_tyresDamage","FR_tyresDamage","RL_tyresDamage","RR_tyresDamage","FL_brakesTemperature","FR_brakesTemperature","RL_brakesTemperature","RR_brakesTemperature")
 
-    def datasetDev(dataFilePath):
-        df = spark.read.csv(dataFilePath, header=True, inferSchema=True)
+    def datasetDev(self, dataFilePath):
+        #df = self.spark.read.csv(dataFilePath, header=True, inferSchema=True)
 
         gp_id = re.search(r'_(\d+)', dataFilePath).group(1)
 
-        df = df.orderBy(["pilot_index", "frameIdentifier"])
+        #df = df.orderBy(["pilot_index", "frameIdentifier"])
 
         window_spec = Window.partitionBy("pilot_index").orderBy("frameIdentifier")
 

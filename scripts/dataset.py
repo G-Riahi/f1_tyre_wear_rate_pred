@@ -112,7 +112,7 @@ class dataset:
         self.df = self.forwardpass(self.df, "FL_surfaceType", "FR_surfaceType", "RL_surfaceType", "RR_surfaceType", "pitLimiterStatus", "actualTyreCompound", "drs", "gear", "ersDeployMode", "fuelMix")
         self.df = self.interpolate(self.df, "speed", "throttle", "steer", "brake", "clutch", "engineRPM", "engineTemperature", "fuelInTank", "fuelRemainingLaps", "ersStoreEnergy", "ersHarvestedThisLapMGUK", "ersHarvestedThisLapMGUH", "ersDeployedThisLap", "FL_tyresSurfaceTemperature","FR_tyresSurfaceTemperature","RL_tyresSurfaceTemperature","RR_tyresSurfaceTemperature","FL_tyresInnerTemperature","FR_tyresInnerTemperature","RL_tyresInnerTemperature","RR_tyresInnerTemperature","FL_tyresPressure","FR_tyresPressure","RL_tyresPressure","RR_tyresPressure","FL_tyresWear","FR_tyresWear","RL_tyresWear","RR_tyresWear","FL_tyresDamage","FR_tyresDamage","RL_tyresDamage","RR_tyresDamage","FL_brakesTemperature","FR_brakesTemperature","RL_brakesTemperature","RR_brakesTemperature")
 
-    def datasetDev(self, dataFilePath):
+    def datasetDev(self, dataFilePath, folder):
         #df = self.spark.read.csv(dataFilePath, header=True, inferSchema=True)
 
         gp_id = re.search(r'_(\d+)', dataFilePath).group(1)
@@ -127,4 +127,14 @@ class dataset:
         df = df.withColumn("chunk_id", floor((col("row_num") - 1) / 200))
 
         # Save as partitioned Parquet files
-        df.write.mode("overwrite").partitionBy("pilot_index", "chunk_id").option("header", "true").csv("telemetrydata/"+gp_id)
+        df.write.mode("overwrite").partitionBy("pilot_index", "chunk_id").option("header", "true").csv(folder + "/" + gp_id)
+
+    def datasetPBI(self, dataFilePath, folder):
+        gp_id = re.search(r'_(\d+)', dataFilePath).group(1)
+
+        window_spec = Window.partitionBy("pilot_index").orderBy("frameIdentifier")
+
+        df = df.withColumn("row_num", row_number().over(window_spec))
+
+        # Save as partitioned Parquet files
+        df.write.mode("overwrite").partitionBy("pilot_index").option("header", "true").csv(folder + "/" + gp_id)

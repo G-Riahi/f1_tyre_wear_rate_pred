@@ -2,6 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import row_number, floor, split, col, when, sum
 from pyspark.sql.window import Window
 from pyspark.sql.functions import col, lag, lead, when, avg, last
+from datetime import datetime, timezone
 import re
 import os
 import sys
@@ -121,20 +122,21 @@ class dataset:
 
         window_spec = Window.partitionBy("pilot_index").orderBy("frameIdentifier")
 
-        df = df.withColumn("row_num", row_number().over(window_spec))
+        temp = self.df.withColumn("row_num", row_number().over(window_spec))
 
         # Create chunk IDs (200 frames per chunk)
-        df = df.withColumn("chunk_id", floor((col("row_num") - 1) / 200))
+        temp = temp.withColumn("chunk_id", floor((col("row_num") - 1) / 200))
 
         # Save as partitioned Parquet files
-        df.write.mode("overwrite").partitionBy("pilot_index", "chunk_id").option("header", "true").csv(folder + "/" + gp_id)
+        temp.write.mode("overwrite").partitionBy("pilot_index", "chunk_id").option("header", "true").csv(folder + "/" + gp_id)
 
     def datasetPBI(self, dataFilePath, folder):
         gp_id = re.search(r'_(\d+)', dataFilePath).group(1)
 
-        window_spec = Window.partitionBy("pilot_index").orderBy("frameIdentifier")
-
-        df = df.withColumn("row_num", row_number().over(window_spec))
-
         # Save as partitioned Parquet files
-        df.write.mode("overwrite").partitionBy("pilot_index").option("header", "true").csv(folder + "/" + gp_id)
+        self.df.write.mode("overwrite").partitionBy("pilot_index").option("header", "true").csv(folder + "/" + gp_id)
+
+    def logProgress(message, file):
+        with open(file, 'a') as f:
+            timestamp = datetime.now(timezone.utc).isoformat()
+            print(f"[{timestamp}] {message}")

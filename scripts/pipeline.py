@@ -38,8 +38,31 @@ for dataFile in fileList:
         datasetClasses[id] = dataset(spark, tempdf)
 
 # Implementing data transformation functions (for data analysis at least for now)
-for i in datasetClasses.keys():
+'''for i in datasetClasses.keys():
     datasetClasses[i].transform()
     datasetClasses[i].imputation()
+    datasetClasses[i].datasetPBI(i, '/home/gesser/Desktop/f1_tyre_wear_rate_pred/data/PBI')'''
+
+from concurrent.futures import ThreadPoolExecutor
+import time
+
+def process_dataset(gp_id, ds_obj, folder):
+    ds_obj.transform()
+    ds_obj.imputation()
+    ds_obj.datasetPBI(gp_id, folder)
+
+folder_path = '/home/gesser/Desktop/f1_tyre_wear_rate_pred/data/PBI'
+
+with ThreadPoolExecutor(max_workers=12) as executor:  # Adjust max_workers based on your CPU/Spark cluster
+    futures = []
+    start = time.time()
+    for gp_id, ds_obj in datasetClasses.items():
+        futures.append(executor.submit(process_dataset, gp_id, ds_obj, folder_path))
+        
+    # Optionally wait for all to complete
+    for future in futures:
+        future.result()
+    end=time.time()
+    print(f"it took {end-start:.2f} seconds")
 
 spark.stop()

@@ -9,6 +9,9 @@ import sys
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 
+#for testing purposes:
+import time
+
 
 class dataset:
 
@@ -23,7 +26,7 @@ class dataset:
     # Interpolate missing values by replacing each null with the average 
     # of the preceding and following non-null values
     # --> used for numerical values
-    def interpolate(df, *columns):
+    def interpolate(self, df, *columns):
         window_spec = Window.partitionBy("pilot_index").orderBy("frameIdentifier")
         
         for column in columns:
@@ -40,7 +43,7 @@ class dataset:
     # forwardpass funtion, to replace each null value with the preceding
     # non-null values
     # --> used for categorical vaules
-    def forwardpass(df, *columns):
+    def forwardpass(self, df, *columns):
         windowSpec = Window.partitionBy("pilot_index").orderBy("frameIdentifier").rowsBetween(-sys.maxsize, 0)
 
         for column in columns:
@@ -113,11 +116,8 @@ class dataset:
         self.df = self.forwardpass(self.df, "FL_surfaceType", "FR_surfaceType", "RL_surfaceType", "RR_surfaceType", "pitLimiterStatus", "actualTyreCompound", "drs", "gear", "ersDeployMode", "fuelMix")
         self.df = self.interpolate(self.df, "speed", "throttle", "steer", "brake", "clutch", "engineRPM", "engineTemperature", "fuelInTank", "fuelRemainingLaps", "ersStoreEnergy", "ersHarvestedThisLapMGUK", "ersHarvestedThisLapMGUH", "ersDeployedThisLap", "FL_tyresSurfaceTemperature","FR_tyresSurfaceTemperature","RL_tyresSurfaceTemperature","RR_tyresSurfaceTemperature","FL_tyresInnerTemperature","FR_tyresInnerTemperature","RL_tyresInnerTemperature","RR_tyresInnerTemperature","FL_tyresPressure","FR_tyresPressure","RL_tyresPressure","RR_tyresPressure","FL_tyresWear","FR_tyresWear","RL_tyresWear","RR_tyresWear","FL_tyresDamage","FR_tyresDamage","RL_tyresDamage","RR_tyresDamage","FL_brakesTemperature","FR_brakesTemperature","RL_brakesTemperature","RR_brakesTemperature")
 
-    def datasetDev(self, dataFilePath, folder):
+    def datasetDev(self, gp_id, folder):
         #df = self.spark.read.csv(dataFilePath, header=True, inferSchema=True)
-
-        gp_id = re.search(r'_(\d+)', dataFilePath).group(1)
-
         #df = df.orderBy(["pilot_index", "frameIdentifier"])
 
         window_spec = Window.partitionBy("pilot_index").orderBy("frameIdentifier")
@@ -130,11 +130,10 @@ class dataset:
         # Save as partitioned Parquet files
         temp.write.mode("overwrite").partitionBy("pilot_index", "chunk_id").option("header", "true").csv(folder + "/" + gp_id)
 
-    def datasetPBI(self, dataFilePath, folder):
-        gp_id = re.search(r'_(\d+)', dataFilePath).group(1)
-
+    def datasetPBI(self, gp_id, folder):
         # Save as partitioned Parquet files
-        self.df.write.mode("overwrite").partitionBy("pilot_index").option("header", "true").csv(folder + "/" + gp_id)
+        self.df.write.mode("overwrite").partitionBy("pilot_index").parquet(f"{folder}/{gp_id}")
+        
 
     def logProgress(message, file):
         with open(file, 'a') as f:

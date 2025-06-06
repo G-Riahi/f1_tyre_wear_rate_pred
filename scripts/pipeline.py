@@ -38,7 +38,7 @@ fileList = os.listdir(path)
 for dataFile in fileList:
     if 'Telemetry' in dataFile:
         id = re.search(r'_(\d+)', dataFile).group(1)
-        tempdf = spark.read.csv(path+"/"+dataFile, header=True, inferSchema=True)
+        tempdf = spark.read.csv(os.path.join(path, dataFile), header=True, inferSchema=True)
         datasetClasses[id] = dataset(spark, tempdf)
 
 # Implementing data transformation functions, and storing locally the results

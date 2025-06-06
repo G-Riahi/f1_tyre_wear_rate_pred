@@ -128,11 +128,14 @@ class dataset:
         temp = temp.withColumn("chunk_id", floor((col("row_num") - 1) / 200))
 
         # Save as partitioned Parquet files
-        temp.write.mode("overwrite").partitionBy("pilot_index", "chunk_id").option("header", "true").csv(folder + "/" + gp_id)
+        temp.write.mode("overwrite").partitionBy("pilot_index", "chunk_id").parquet(folder + "/" + gp_id)
 
     def datasetPBI(self, gp_id, folder):
         # Save as partitioned Parquet files
-        self.df.write.mode("overwrite").partitionBy("pilot_index").parquet(f"{folder}/{gp_id}")
+        # Update: since powerBI doesn't allow for partitioned and hirarchical structures
+        # I had to restructure everything, so that it can be considered as relational dataset
+        # Drivers and session datasets will be treated outside of the class
+        self.df.coalesce(1).write.mode("overwrite").parquet(f"{folder}/{gp_id}")
         
 
     def logProgress(message, file):

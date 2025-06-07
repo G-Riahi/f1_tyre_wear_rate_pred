@@ -37,7 +37,9 @@ sessionsAndDrivers = {}
 with ThreadPoolExecutor(max_workers=8) as executor:  # adjust workers to your CPU/io limits
     results = executor.map(process_file, fileList)
 
+
 for id, key, df in results:
+    print(f'{id}, {key}')
     if id is None:
         continue
     if id not in sessionsAndDrivers:
@@ -54,5 +56,3 @@ for i in sessionsAndDrivers.keys():
     temp2['raceId'] = i
     fullDriverDataset = pd.concat([fullDriverDataset,temp1], ignore_index=True)
     fullSessionDataset = pd.concat([fullSessionDataset,temp2], ignore_index=True)
-
-print(fullDriverDataset)

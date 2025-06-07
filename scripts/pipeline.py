@@ -1,7 +1,8 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import row_number, floor, split, col, when, sum
 from pyspark.sql.window import Window
-from pyspark.sql.functions import col, lag, lead, when, avg, last
+from pyspark.sql.functions import col, lag, lead, when, avg, last, lit
+from pyspark.sql.types import StructType
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 import time
@@ -9,6 +10,7 @@ import re
 import os
 import sys
 import shutil
+import random
 import kagglehub
 from concurrent.futures import ThreadPoolExecutor
 
@@ -59,11 +61,35 @@ with ThreadPoolExecutor(max_workers=11) as executor:
     end=time.time()
     print(f"it took {end-start:.2f} seconds")
 
+# donloading structured RNN datasets (before renaming and loading them to the cloud)
+
 def upload_dataset(gp_id, ds_obj, folder):
-    ds_obj.datasetPBI(gp_id, f"{folder}/PBI")
     ds_obj.datasetDev(gp_id, f"{folder}/tempRNN")
 
+# New: Modifying and concatinating telemetry datasets for postgresql
+for gp_id, ds_obj in datasetClasses.items():
+    ds_obj.addId(gp_id)
+
+schema = random.choice(list(datasetClasses.values())).getSchema()
+concatTelemetry = spark.createDataFrame([], schema)
+
+for ds_obj in datasetClasses.values():
+    concatTelemetry  = concatTelemetry.union(ds_obj.getDf())
+
 folder_path = '/home/gesser/Desktop/f1_tyre_wear_rate_pred/data'
+
+# Replace it with code to upload it directly to postgresql instead of localy
+# concatTelemetry.coalesce(1).write.mode("overwrite").parquet(f"{folder_path}/PBI")
+concatTelemetry.write \
+    .format("jdbc") \
+    .option("url", "jdbc:postgresql://localhost:5432/telemetry") \
+    .option("dbtable", "schema.your_table") \
+    .option("user", "gesser") \
+    .option("password", "custom_password") \
+    .mode("append") \
+    .save()
+
+# Renaming and (afterwards) uploading to the cloud
 
 with ThreadPoolExecutor(max_workers=11) as executor: 
     futures = []

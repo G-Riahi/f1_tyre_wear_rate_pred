@@ -1,7 +1,8 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import row_number, floor, split, col, when, sum
 from pyspark.sql.window import Window
-from pyspark.sql.functions import col, lag, lead, when, avg, last
+from pyspark.sql.functions import col, lag, lead, when, avg, last, lit
+from pyspark.sql.types import StructType
 from datetime import datetime, timezone
 import re
 import os
@@ -22,6 +23,12 @@ class dataset:
     # To have a sneak peek on the telemetry dataset
     def show(self, n=5):
         self.df.show(n=n)
+
+    def getSchema(self):
+        return self.df.schema
+    
+    def getDf(self):
+        return self.df
 
     # Interpolate missing values by replacing each null with the average 
     # of the preceding and following non-null values
@@ -136,6 +143,9 @@ class dataset:
         # I had to restructure everything, so that it can be considered as relational dataset
         # Drivers and session datasets will be treated outside of the class
         self.df.coalesce(1).write.mode("overwrite").parquet(f"{folder}/{gp_id}")
+
+    def addId(self, gp_id):
+        self.df = self.df.withColumn("raceId", lit(gp_id))
         
 
     def logProgress(message, file):

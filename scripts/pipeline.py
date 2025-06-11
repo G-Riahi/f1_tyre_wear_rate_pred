@@ -5,6 +5,7 @@ from pyspark.sql.functions import col, lag, lead, when, avg, last, lit
 from pyspark.sql.types import StructType
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
 import time
 import re
 import os
@@ -22,20 +23,51 @@ from dataset import dataset
 # Finally the datasets (for data anlysis and RNN training) will be stored in cloud data warehouse
 # Between Azure Datalake and AWS S3
 
-# 10 minutes for now, will be optimized
+# 10 minutes for now, will be optimized further after first deployment
+jdbc_path = "/home/gesser/Desktop/postgres/postgresql-42.7.7.jar"
+db_url = "jdbc:postgresql://localhost:5432/telemetry"
+db_table = "telemetry"
+username = "floppa"
+password = "flopps"
+write_mode = "overwrite"
+connection_properties = {
+    "user": username,
+    "password": password,
+    "driver": "org.postgresql.Driver"
+}
+
+datasetClasses = {}
+sessionsAndDrivers= {}
 
 spark = SparkSession.builder \
     .appName("TelemetryProcessing") \
+    .config("spark.jars", jdbc_path) \
     .config("spark.driver.memory", "8g") \
     .config("spark.executor.memory", "8g") \
     .getOrCreate()
 
 path = kagglehub.dataset_download("coni57/f1-2020-race-data")
 
-datasetClasses = {}
 
 fileList = os.listdir(path)
 
+start = time.time()
+id_pattern = re.compile(r'_(\d+)')
+
+def process_file(dataFile):
+    match = id_pattern.search(dataFile)
+    if not match:
+        return None, None, None
+    id = match.group(1)
+    full_path = os.path.join(path, dataFile)
+    tempdf = pd.read_csv(full_path, engine='c')
+    if 'ParticipantData' in dataFile:
+        return id, 'drivers', tempdf
+    elif 'SessionData' in dataFile:
+        return id, 'session', tempdf
+    return None, None, None
+
+start = time.time()
 # Importing and creating telemtry dataset classes (and stocking them in a dictionary)
 for dataFile in fileList:
     if 'Telemetry' in dataFile:
@@ -43,8 +75,22 @@ for dataFile in fileList:
         tempdf = spark.read.csv(os.path.join(path, dataFile), header=True, inferSchema=True)
         datasetClasses[id] = dataset(spark, tempdf)
 
+#Importing and structuring sessions and drivers datasets
+with ThreadPoolExecutor(max_workers=8) as executor:  # adjust workers to your CPU/io limits
+    results = executor.map(process_file, fileList)
+
+for id, key, df in results:
+    if id is None:
+        continue
+    if id not in sessionsAndDrivers:
+        sessionsAndDrivers[id] = {}
+    sessionsAndDrivers[id][key] = df
+
+print(f"extraction took {time.time()-start:.2f} seconds")
+
 # Implementing data transformation functions, and storing locally the results
 
+start = time.time()
 def transform_dataset(ds_obj):
     ds_obj.transform()
     ds_obj.imputation()
@@ -60,6 +106,15 @@ with ThreadPoolExecutor(max_workers=11) as executor:
         future.result()
     end=time.time()
     print(f"it took {end-start:.2f} seconds")
+
+# Combining sessions and drivers datasets (before loading them to PostgreSQL)
+fullDriverDataset, fullSessionDataset = pd.DataFrame(), pd.DataFrame()
+for i in sessionsAndDrivers.keys():
+    temp1, temp2 = sessionsAndDrivers[i]['drivers'], sessionsAndDrivers[i]['drivers']
+    temp1['raceId'] = i
+    temp2['raceId'] = i
+    fullDriverDataset = pd.concat([fullDriverDataset,temp1], ignore_index=True)
+    fullSessionDataset = pd.concat([fullSessionDataset,temp2], ignore_index=True)
 
 # donloading structured RNN datasets (before renaming and loading them to the cloud)
 
@@ -80,14 +135,19 @@ folder_path = '/home/gesser/Desktop/f1_tyre_wear_rate_pred/data'
 
 # Replace it with code to upload it directly to postgresql instead of localy
 # concatTelemetry.coalesce(1).write.mode("overwrite").parquet(f"{folder_path}/PBI")
-concatTelemetry.write \
-    .format("jdbc") \
-    .option("url", "jdbc:postgresql://localhost:5432/telemetry") \
-    .option("dbtable", "schema.your_table") \
-    .option("user", "gesser") \
-    .option("password", "custom_password") \
-    .mode("append") \
-    .save()
+
+try:
+    concatTelemetry.write \
+        .format("jdbc") \
+        .option("url", db_url) \
+        .option("dbtable", db_table) \
+        .options(**connection_properties) \
+        .mode(write_mode) \
+        .save()
+    print(f"\nDataFrame successfully written to PostgreSQL table '{db_table}' in database '{db_url}' with mode '{write_mode}'.")
+
+except Exception as e:
+    print(f"\nError writing DataFrame to PostgreSQL: {e}")
 
 # Renaming and (afterwards) uploading to the cloud
 

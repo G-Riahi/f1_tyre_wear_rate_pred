@@ -31,8 +31,6 @@ def process_file(dataFile):
         return id, 'session', tempdf
     return None, None, None
 
-sessionsAndDrivers = {}
-
 # Use ThreadPoolExecutor to parallelize file reading
 with ThreadPoolExecutor(max_workers=8) as executor:  # adjust workers to your CPU/io limits
     results = executor.map(process_file, fileList)
